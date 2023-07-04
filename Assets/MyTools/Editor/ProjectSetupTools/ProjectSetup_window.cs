@@ -17,6 +17,8 @@ using System.Collections.Specialized;
 using Unity.VisualScripting.YamlDotNet.Core.Tokens;
 using PlasticPipe.PlasticProtocol.Messages;
 using System.Linq;
+using System.Linq.Expressions;
+using static PlasticPipe.PlasticProtocol.Messages.Serialization.ItemHandlerMessagesSerialization;
 
 namespace MyTools
 {
@@ -35,10 +37,9 @@ namespace MyTools
         bool showAttribArr = true;
         bool writeData = false;
         bool reloadData = false;
+        bool checkLoad = true;
 
         Vector2 paletteScrollPos = new Vector2(0, 0);
-
-        //IDictionary<string, bool> showAttribObj = new Dictionary<string, bool>();
 
         Dictionary<string, bool> showAttribObj = new Dictionary<string, bool>();
 
@@ -48,6 +49,10 @@ namespace MyTools
         #endregion
 
         #region Main Methods
+
+        
+        Dictionary<string, string> listDataOriginal = new Dictionary<string, string>();
+
         public static void InitWindow()
         {
             win = EditorWindow.GetWindow<ProjectSetup_window>("Project Setup");
@@ -67,7 +72,15 @@ namespace MyTools
             {
                 checkBtn = true;
 
-                if (File.Exists(dir))
+/*                if (File.Exists(dir))
+                {
+                    data = LoadJson(dir);
+                    foreach (JProperty property in data.Properties())
+                    {
+                        curData.Add(property.Name, property.Value);
+                    }
+                }*/
+                try
                 {
                     data = LoadJson(dir);
                     foreach (JProperty property in data.Properties())
@@ -75,7 +88,12 @@ namespace MyTools
                         curData.Add(property.Name, property.Value);
                     }
                 }
+                catch (Exception e)
+                {
+                    Debug.Log(e);
+                }
             }
+
             paletteScrollPos = EditorGUILayout.BeginScrollView(paletteScrollPos, GUILayout.ExpandWidth(true));
 
             if (checkBtn && data != null)
@@ -96,10 +114,12 @@ namespace MyTools
                             if (!Selection.activeTransform)
                             {
                                 JObject newProperty = (JObject)property.Value;
+                                JObject dataOrigin = (JObject)data[property.Name];
+
                                 foreach (JProperty child in newProperty.Properties())
                                 {
                                     EditorGUI.indentLevel++;
-                                    ExportDeepDict(child.Name, child.Value, newProperty);
+                                    ExportDeepDict(child.Name, child.Value, newProperty, dataOrigin);
                                     EditorGUI.indentLevel--;
                                 }
                             }
@@ -113,6 +133,7 @@ namespace MyTools
                     else if (property.Value.Type.ToString() == "Array")
                     {
                         JArray childData = (JArray)property.Value;
+                        JArray dataOrigin = (JArray)data[property.Name];
                         nameAttribArr = property.Name;
                         showAttribArr = EditorGUILayout.Foldout(showAttribArr, nameAttribArr);
                         if (showAttribArr)
@@ -121,7 +142,7 @@ namespace MyTools
                             {
                                 for (int i = 0; i < childData.Count; i++)
                                 {
-                                    ExportDeepList(childData[i], childData, i);
+                                    ExportDeepList(childData[i], childData, dataOrigin[i], i);
                                 }
                             }
 
@@ -137,7 +158,7 @@ namespace MyTools
                         EditorGUI.BeginChangeCheck();
                         GUILayout.BeginHorizontal();
                         nameAttrib = property.Name;
-                        nameAttrib = EditorGUILayout.TextField(nameAttrib, property.Value.ToString(), GUILayout.Width(200));
+                        nameAttrib = EditorGUILayout.TextField(nameAttrib + CheckValueChange(data[property.Name].ToString() == curData[property.Name].ToString()) + ":", property.Value.ToString(), GUILayout.Width(200));
 
                         GUILayout.EndHorizontal();
 
@@ -148,10 +169,12 @@ namespace MyTools
                                 try
                                 {
                                     curData[property.Name] = Int32.Parse(nameAttrib);
+                                    checkLoad = true;
                                 }
                                 catch (FormatException)
                                 {
                                     Debug.Log("Error");
+                                    checkLoad = false;
                                 }
                             }
                             else
@@ -179,9 +202,18 @@ namespace MyTools
             }
             if (writeData)
             {
-                WriteToJson(curData, dir);
-                data = LoadJson(dir);
-                writeData = false;
+                if(checkLoad)
+                {
+                    WriteToJson(curData, dir);
+                    data = LoadJson(dir);
+                    writeData = false;
+                }
+                else
+                {
+                    Debug.Log("Write Data Failed!!!");
+                    writeData = false;
+                }
+                
             }
             if (reloadData)
             {
@@ -214,8 +246,9 @@ namespace MyTools
             }
         }
 
-        public void ExportDeepDict(string dataName, JToken dataObject, JObject parentDict)
+        public void ExportDeepDict(string dataName, JToken dataObject, JObject parentDict, JObject dataOrigin, int index = 0)
         {
+
             if (dataObject.Type.ToString() == "Object")
             {
                 if (!showAttribObj.ContainsKey(dataName))
@@ -223,6 +256,7 @@ namespace MyTools
                     showAttribObj.Add(dataName, true);
                 }
                 JObject dataCallBack = (JObject)dataObject;
+                JObject newDataOrigin = (JObject)dataOrigin[dataName];
                 nameAttribObj = dataName;
                 showAttribObj[dataName] = EditorGUILayout.Foldout(showAttribObj[dataName], nameAttribObj);
                 if (showAttribObj[dataName])
@@ -232,7 +266,7 @@ namespace MyTools
                         foreach (JProperty child in dataCallBack.Properties())
                         {
                             EditorGUI.indentLevel++;
-                            ExportDeepDict(child.Name, child.Value, dataCallBack);
+                            ExportDeepDict(child.Name, child.Value, dataCallBack, newDataOrigin);
                             EditorGUI.indentLevel--;
                         }
                     }
@@ -251,6 +285,7 @@ namespace MyTools
                 }
 
                 JArray childData = (JArray)dataObject;
+                JArray newDataOriginArray = (JArray)dataOrigin[dataName];
 
                 nameAttribObj = dataName;
                 showAttribObj[dataName] = EditorGUILayout.Foldout(showAttribObj[dataName], nameAttribObj);
@@ -262,7 +297,7 @@ namespace MyTools
                         for (int i = 0; i < childData.Count; i++)
                         {
                             EditorGUI.indentLevel++;
-                            ExportDeepList(childData[i], childData, i);
+                            ExportDeepList(childData[i], childData, newDataOriginArray[i], i);
                             EditorGUI.indentLevel--;
                         }
                         EditorGUILayout.EndVertical();
@@ -278,7 +313,8 @@ namespace MyTools
             {
                 EditorGUI.BeginChangeCheck();
                 EditorGUI.indentLevel++;
-                nameAttribObj = EditorGUILayout.TextField($"{dataName}: ", dataObject.ToString());
+                nameAttribObj = EditorGUILayout.TextField($"{dataName}" + CheckValueChange(dataOrigin[dataName].ToString() == parentDict[dataName].ToString()), dataObject.ToString());
+
                 if (EditorGUI.EndChangeCheck())
                 {
                     if (parentDict[dataName].Type.ToString() == "Integer")
@@ -286,33 +322,34 @@ namespace MyTools
                         try
                         {
                             parentDict[dataName] = Int32.Parse(nameAttribObj);
-                            Debug.Log(dataName);
-                            Debug.Log(data.Property(dataName));
+                            checkLoad = true;
                         }
                         catch (FormatException e)
                         {
+                            checkLoad = false;
                             Debug.Log(e);
                         }
                     }
                     else
                     {
-                        parentDict[dataName] = nameAttribObj;
+                        parentDict[dataName] = nameAttribObj; 
                     }
                 }
                 EditorGUI.indentLevel--;
             }
         }
 
-        public void ExportDeepList(JToken data, JArray parentData, int index)
+        public void ExportDeepList(JToken data, JArray parentData, JToken dataOrigin ,int index)
         {
             if (data.Type.ToString() == "Object")
             {
                 JObject dataCallBack = (JObject)data;
+                JObject newDataOrigin = (JObject)dataOrigin;
                 EditorGUILayout.BeginVertical("box");
                 foreach (JProperty child in dataCallBack.Properties())
                 {
                     EditorGUI.indentLevel++;
-                    ExportDeepDict(child.Name, child.Value, dataCallBack);
+                    ExportDeepDict(child.Name, child.Value, dataCallBack, newDataOrigin, index);
                     EditorGUI.indentLevel--;
                 }
                 EditorGUILayout.EndVertical();
@@ -321,7 +358,7 @@ namespace MyTools
             {
                 EditorGUI.BeginChangeCheck();
                 EditorGUI.indentLevel++;
-                nameAttribArr = EditorGUILayout.TextField(data.ToString());
+                nameAttribArr = EditorGUILayout.TextField(CheckValueChange(dataOrigin.ToString() == parentData[index].ToString()), data.ToString());
                 if (EditorGUI.EndChangeCheck())
                 {
                     if (parentData[index].Type.ToString() == "Integer")
@@ -329,9 +366,11 @@ namespace MyTools
                         try
                         {
                             parentData[index] = Int32.Parse(nameAttribArr);
+                            checkLoad = true;
                         }
                         catch (FormatException)
                         {
+                            checkLoad = false;
                             Debug.Log("Error");
                         }
                     }
@@ -341,6 +380,17 @@ namespace MyTools
                     }
                 }
                 EditorGUI.indentLevel--;
+            }
+        }
+
+        public string CheckValueChange(bool change)
+        {
+            if (!change)
+            {
+                return "*";
+            } else
+            {
+                return " ";
             }
         }
     }
