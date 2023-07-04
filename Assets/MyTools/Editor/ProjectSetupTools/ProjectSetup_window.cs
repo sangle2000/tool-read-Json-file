@@ -19,6 +19,7 @@ using PlasticPipe.PlasticProtocol.Messages;
 using System.Linq;
 using System.Linq.Expressions;
 using static PlasticPipe.PlasticProtocol.Messages.Serialization.ItemHandlerMessagesSerialization;
+using System.Globalization;
 
 namespace MyTools
 {
@@ -72,17 +73,10 @@ namespace MyTools
             {
                 checkBtn = true;
 
-/*                if (File.Exists(dir))
-                {
-                    data = LoadJson(dir);
-                    foreach (JProperty property in data.Properties())
-                    {
-                        curData.Add(property.Name, property.Value);
-                    }
-                }*/
                 try
                 {
                     data = LoadJson(dir);
+                    curData = new();
                     foreach (JProperty property in data.Properties())
                     {
                         curData.Add(property.Name, property.Value);
@@ -90,7 +84,7 @@ namespace MyTools
                 }
                 catch (Exception e)
                 {
-                    Debug.Log(e);
+                    this.LogError(e);
                 }
             }
 
@@ -100,6 +94,7 @@ namespace MyTools
             {
                 foreach (JProperty property in curData.Properties())
                 {
+
                     if (property.Value.Type.ToString() == "Object")
                     {
                         if (!showAttribObj.ContainsKey(property.Name))
@@ -171,9 +166,9 @@ namespace MyTools
                                     curData[property.Name] = Int32.Parse(nameAttrib);
                                     checkLoad = true;
                                 }
-                                catch (FormatException)
+                                catch (FormatException e)
                                 {
-                                    Debug.Log("Error");
+                                    this.LogError(e);
                                     checkLoad = false;
                                 }
                             }
@@ -210,7 +205,7 @@ namespace MyTools
                 }
                 else
                 {
-                    Debug.Log("Write Data Failed!!!");
+                    this.LogError("Write Data Failed");
                     writeData = false;
                 }
                 
@@ -314,10 +309,9 @@ namespace MyTools
                 EditorGUI.BeginChangeCheck();
                 EditorGUI.indentLevel++;
                 nameAttribObj = EditorGUILayout.TextField($"{dataName}" + CheckValueChange(dataOrigin[dataName].ToString() == parentDict[dataName].ToString()), dataObject.ToString());
-
                 if (EditorGUI.EndChangeCheck())
                 {
-                    if (parentDict[dataName].Type.ToString() == "Integer")
+                    /*if (parentDict[dataName].Type.ToString() == "Integer")
                     {
                         try
                         {
@@ -327,13 +321,15 @@ namespace MyTools
                         catch (FormatException e)
                         {
                             checkLoad = false;
-                            Debug.Log(e);
+                            this.LogError(e);
                         }
                     }
                     else
                     {
                         parentDict[dataName] = nameAttribObj; 
-                    }
+                    }*/
+
+                    ValidateData(parentDict[dataName].Type.ToString(), nameAttribObj, null, parentDict, 0, dataName);
                 }
                 EditorGUI.indentLevel--;
             }
@@ -361,23 +357,25 @@ namespace MyTools
                 nameAttribArr = EditorGUILayout.TextField(CheckValueChange(dataOrigin.ToString() == parentData[index].ToString()), data.ToString());
                 if (EditorGUI.EndChangeCheck())
                 {
-                    if (parentData[index].Type.ToString() == "Integer")
-                    {
-                        try
-                        {
-                            parentData[index] = Int32.Parse(nameAttribArr);
-                            checkLoad = true;
-                        }
-                        catch (FormatException)
-                        {
-                            checkLoad = false;
-                            Debug.Log("Error");
-                        }
-                    }
-                    else
-                    {
-                        parentData[index] = nameAttribArr;
-                    }
+                    /* if (parentData[index].Type.ToString() == "Integer")
+                     {
+                         try
+                         {
+                             parentData[index] = Int32.Parse(nameAttribArr);
+                             checkLoad = true;
+                         }
+                         catch (FormatException e)
+                         {
+                             checkLoad = false;
+                             this.LogError(e);
+                         }
+                     }
+                     else
+                     {
+                         parentData[index] = nameAttribArr;
+                     }*/
+
+                    ValidateData(parentData[index].Type.ToString(), nameAttribArr, parentData, null, index, "");
                 }
                 EditorGUI.indentLevel--;
             }
@@ -391,6 +389,76 @@ namespace MyTools
             } else
             {
                 return " ";
+            }
+        }
+
+        public void ValidateData(string dataType, string inputData, JArray parentList = null, JObject parentDict = null, int index = 0, string dataName = "")
+        {
+            if (parentDict != null)
+            {
+                if (dataType == "Integer")
+                {
+                    try
+                    {
+                        checkLoad = true;
+                        parentDict[dataName] = Int32.Parse(inputData);
+                    }
+                    catch (FormatException e)
+                    {
+                        checkLoad = false;
+                        this.LogError(e);
+                    }
+                }
+                else if (dataType == "Float")
+                {
+                    try
+                    {
+                        checkLoad = true;
+                        parentDict[dataName] = float.Parse(inputData, CultureInfo.InvariantCulture.NumberFormat);
+                    }
+                    catch (FormatException e)
+                    {
+                        checkLoad = false;
+                        this.LogError(e);
+                    }
+                }
+                else
+                {
+                    parentDict[dataName] = inputData;
+                }
+            }
+            else
+            {
+                if (dataType == "Integer")
+                {
+                    try
+                    {
+                        checkLoad = true;
+                        parentList[index] = Int32.Parse(inputData);
+                    }
+                    catch (FormatException e)
+                    {
+                        checkLoad = false;
+                        this.LogError(e);
+                    }
+                }
+                else if (dataType == "Float")
+                {
+                    try
+                    {
+                        checkLoad = true;
+                        parentList[index] = float.Parse(inputData, CultureInfo.InvariantCulture.NumberFormat);
+                    }
+                    catch (FormatException e)
+                    {
+                        checkLoad = false;
+                        this.LogError(e);
+                    }
+                }
+                else
+                {
+                    parentList[index] = inputData;
+                }
             }
         }
     }
