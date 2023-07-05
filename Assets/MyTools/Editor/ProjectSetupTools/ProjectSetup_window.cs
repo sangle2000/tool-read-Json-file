@@ -22,6 +22,8 @@ using static PlasticPipe.PlasticProtocol.Messages.Serialization.ItemHandlerMessa
 using System.Globalization;
 using UnityEditor.AnimatedValues;
 using System.Security.Cryptography;
+using UnityEngine.UIElements;
+using Unity.VisualScripting;
 
 namespace MyTools
 {
@@ -36,12 +38,19 @@ namespace MyTools
         string nameAttribArr = "";
         string nameAttribObj = "";
         string nameAttrib = "";
-        bool nameAttribBool;
+        string valueSearch = "";
+        string searchKey = "";
+        string searchValueField = "";
+        string searchKeyField = "";
 
+
+        bool nameAttribBool;
         bool showAttribArr = true;
         bool writeData = false;
         bool reloadData = false;
         bool checkLoad = true;
+        bool showData = false;
+        bool foldout = true;
 
         Vector2 paletteScrollPos = new Vector2(0, 0);
 
@@ -50,6 +59,7 @@ namespace MyTools
         private bool checkBtn = false;
         JObject data = null;
         JObject curData = new();
+        JObject DataSearched = new();
         #endregion
 
         #region Main Methods
@@ -75,6 +85,9 @@ namespace MyTools
                 {
                     data = LoadJson(dir);
                     curData = new();
+                    searchKeyField = "";
+                    searchValueField = "";
+
                     foreach (JProperty property in data.Properties())
                     {
                         curData.Add(property.Name, property.Value);
@@ -90,87 +103,177 @@ namespace MyTools
 
             if (checkBtn && data != null)
             {
-                foreach (JProperty property in curData.Properties())
+                EditorGUI.BeginChangeCheck();
+                searchValueField = EditorGUILayout.TextField("Search By Value: ", searchValueField);
+                searchKeyField = EditorGUILayout.TextField("Search By Key: ", searchKeyField);
+                if (EditorGUI.EndChangeCheck())
                 {
+                    DataSearched = new();
+                    showData = true;
+                    valueSearch = searchValueField;
+                    searchKey = searchKeyField;
+                }
 
-                    if (property.Value.Type.ToString() == "Object")
+                if (valueSearch == "" && searchKey == "")
+                {
+                    showData = true;
+                }
+
+                if (showData)
+                {
+                    foreach (JProperty property in curData.Properties())
                     {
-                        if (!showAttribObj.ContainsKey(property.Name))
+                        if (property.Value.Type.ToString() == "Object")
                         {
-                            showAttribObj.Add(property.Name, true);
-                        }
-
-                        nameAttribObj = property.Name;
-                        showAttribObj[property.Name] = EditorGUILayout.Foldout(showAttribObj[property.Name], nameAttribObj);
-                        if (showAttribObj[property.Name])
-                        {
-                            if (!Selection.activeTransform)
+                            if (!showAttribObj.ContainsKey(property.Name))
                             {
-                                JObject newProperty = (JObject)property.Value;
-                                JObject dataOrigin = (JObject)data[property.Name];
+                                showAttribObj.Add(property.Name, true);
+                            }
 
-                                foreach (JProperty child in newProperty.Properties())
+                            nameAttribObj = property.Name;
+                            showAttribObj[property.Name] = EditorGUILayout.Foldout(showAttribObj[property.Name], nameAttribObj);
+                            if (showAttribObj[property.Name])
+                            {
+                                if (!Selection.activeTransform)
                                 {
-                                    EditorGUI.indentLevel++;
-                                    ExportDeepDict(child.Name, child.Value, newProperty, dataOrigin);
-                                    EditorGUI.indentLevel--;
+                                    JObject newProperty = (JObject)property.Value;
+                                    JObject dataOrigin = (JObject)data[property.Name];
+
+                                    foreach (JProperty child in newProperty.Properties())
+                                    {
+                                        EditorGUI.indentLevel++;
+                                        ExportDeepDict(child.Name, child.Value, newProperty, dataOrigin, nameAttribObj);
+                                        EditorGUI.indentLevel--;
+                                    }
+                                }
+                                else if (Selection.activeTransform)
+                                {
+                                    nameAttribObj = property.Name;
+                                    showAttribObj[property.Name] = false;
                                 }
                             }
-                            else if (Selection.activeTransform)
-                            {
-                                nameAttribObj = property.Name;
-                                showAttribObj[property.Name] = false;
-                            }
                         }
-                    }
-                    else if (property.Value.Type.ToString() == "Array")
-                    {
-                        JArray childData = (JArray)property.Value;
-                        JArray dataOrigin = (JArray)data[property.Name];
-                        nameAttribArr = property.Name;
-                        showAttribArr = EditorGUILayout.Foldout(showAttribArr, nameAttribArr);
-                        if (showAttribArr)
+                        else if (property.Value.Type.ToString() == "Array")
                         {
-                            if (!Selection.activeTransform)
+                            JArray childData = (JArray)property.Value;
+                            JArray dataOrigin = (JArray)data[property.Name];
+                            nameAttribArr = property.Name;
+                            showAttribArr = EditorGUILayout.Foldout(showAttribArr, nameAttribArr);
+                            if (showAttribArr)
                             {
-                                for (int i = 0; i < childData.Count; i++)
+                                if (!Selection.activeTransform)
                                 {
-                                    ExportDeepList(childData[i], childData, dataOrigin[i], i);
+                                    for (int i = 0; i < childData.Count; i++)
+                                    {
+                                        ExportDeepList(childData[i], childData, dataOrigin[i], nameAttribArr, i);
+                                    }
+                                }
+
+                                if (Selection.activeTransform)
+                                {
+                                    nameAttribArr = property.Name;
+                                    showAttribArr = false;
                                 }
                             }
+                        }
 
-                            if (Selection.activeTransform)
+                        else if (property.Value.Type.ToString() == "Boolean")
+                        {
+                            if (showData)
                             {
-                                nameAttribArr = property.Name;
-                                showAttribArr = false;
+                                nameAttribBool = (bool)property.Value;
+                                nameAttrib = property.Name;
+                                nameAttribBool = EditorGUILayout.Toggle(nameAttrib + CheckValueChange(data[property.Name].ToString() == curData[property.Name].ToString()) + ":", nameAttribBool);
+                                curData[property.Name] = nameAttribBool;
                             }
                         }
-                    } 
 
-                    else if (property.Value.Type.ToString() == "Boolean")
-                    {
-                        nameAttribBool = (bool)property.Value;
-                        nameAttrib = property.Name;
-                        nameAttribBool = EditorGUILayout.Toggle(nameAttrib + CheckValueChange(data[property.Name].ToString() == curData[property.Name].ToString()) + ":", nameAttribBool);
-                        curData[property.Name] = nameAttribBool;
-                    }
-
-                    else
-                    {
-                        EditorGUI.BeginChangeCheck();
-                        GUILayout.BeginHorizontal();
-                        nameAttrib = property.Name;
-                        nameAttrib = EditorGUILayout.TextField(nameAttrib + CheckValueChange(data[property.Name].ToString() == curData[property.Name].ToString()) + ":", property.Value.Type.ToString() == "Float" ? ((float)property.Value).ToString("0.0##") : property.Value.ToString(), GUILayout.Width(200));
-
-                        GUILayout.EndHorizontal();
-
-                        if (EditorGUI.EndChangeCheck())
+                        else
                         {
-                            ValidateData(curData[property.Name].Type.ToString(), nameAttrib, null, curData, 0, property.Name);
+
+                            EditorGUI.BeginChangeCheck();
+                            GUILayout.BeginHorizontal();
+                            nameAttrib = property.Name;
+                            nameAttrib = EditorGUILayout.TextField(nameAttrib + CheckValueChange(data[property.Name].ToString() == curData[property.Name].ToString()) + ":", property.Value.Type.ToString() == "Float" ? ((float)property.Value).ToString("0.0##") : property.Value.ToString(), GUILayout.Width(200));
+
+                            GUILayout.EndHorizontal();
+
+                            if (EditorGUI.EndChangeCheck())
+                            {
+                                ValidateData(curData[property.Name].Type.ToString(), nameAttrib, null, curData, 0, property.Name);
+                            }
                         }
                     }
                 }
+                else
+                {
+                    foreach (JProperty property in DataSearched.Properties())
+                    {
+                        nameAttrib = property.Name;
+                        if (property.Value.Type.ToString() == "Object")
+                        {
+                            JObject newObject = (JObject)property.Value;
+                            foldout = EditorGUILayout.Foldout(foldout, nameAttrib);
+
+                            if (foldout)
+                            {
+                                foreach (JProperty child in newObject.Properties())
+                                {
+                                    if (child.Value.Type.ToString() == "Object")
+                                    {
+                                        continue;
+                                    }
+                                    else if (child.Value.Type.ToString() == "Array")
+                                    {
+                                        continue;
+                                    }
+                                    else
+                                    {
+                                        EditorGUI.indentLevel++;
+                                        nameAttrib = child.Name;
+                                        nameAttrib = EditorGUILayout.TextField(nameAttrib, child.Value.Type.ToString() == "Float" ? ((float)child.Value).ToString("0.0##") : child.Value.ToString());
+                                        EditorGUI.indentLevel--;
+                                    }
+                                }
+                            }
+                        }
+
+                        else if (property.Value.Type.ToString() == "Array")
+                        {
+                            JArray newArrayValue = (JArray)property.Value;
+                            foldout = EditorGUILayout.Foldout(foldout, nameAttrib);
+
+                            if (foldout)
+                            {
+                                for (int i = 0; i < newArrayValue.Count; i++)
+                                {
+                                    EditorGUILayout.BeginVertical("box");
+                                    if (newArrayValue[i].Type.ToString() == "Object")
+                                    {
+                                        JObject newObject = (JObject)newArrayValue[i];
+                                        foreach (JProperty child in newObject.Properties())
+                                        {
+                                            EditorGUI.indentLevel++;
+                                            nameAttrib = child.Name;
+                                            nameAttrib = EditorGUILayout.TextField(nameAttrib, child.Value.Type.ToString() == "Float" ? ((float)child.Value).ToString("0.0##") : child.Value.ToString());
+                                            EditorGUI.indentLevel--;
+                                        }
+                                    } else
+                                    {
+                                        EditorGUI.indentLevel++;
+                                        nameAttrib = EditorGUILayout.TextField(newArrayValue[i].Type.ToString() == "Float" ? ((float)newArrayValue[i]).ToString("0.0##") : newArrayValue[i].ToString());
+                                        EditorGUI.indentLevel--;
+                                    }
+                                    EditorGUILayout.EndVertical();
+                                }
+                            }
+                        }
+
+                    }
+                }
             }
+
+            EditorGUILayout.EndScrollView();
 
             if (checkBtn && data != null)
             {
@@ -188,7 +291,7 @@ namespace MyTools
             }
             if (writeData)
             {
-                if(checkLoad)
+                if (checkLoad)
                 {
                     WriteToJson(curData, dir);
                     data = LoadJson(dir);
@@ -199,7 +302,7 @@ namespace MyTools
                     this.LogError("Write Data Failed");
                     writeData = false;
                 }
-                
+
             }
             if (reloadData)
             {
@@ -211,8 +314,6 @@ namespace MyTools
                 }
                 reloadData = false;
             }
-
-            EditorGUILayout.EndScrollView();
         }
         #endregion
 
@@ -232,7 +333,7 @@ namespace MyTools
             }
         }
 
-        public void ExportDeepDict(string dataName, JToken dataObject, JObject parentDict, JObject dataOrigin, int index = 0)
+        public void ExportDeepDict(string dataName, JToken dataObject, JObject parentDict, JObject dataOrigin, string parentKey = "", JArray parentArray = null, int index = 0)
         {
 
             if (dataObject.Type.ToString() == "Object")
@@ -252,7 +353,7 @@ namespace MyTools
                         foreach (JProperty child in dataCallBack.Properties())
                         {
                             EditorGUI.indentLevel++;
-                            ExportDeepDict(child.Name, child.Value, dataCallBack, newDataOrigin);
+                            ExportDeepDict(child.Name, child.Value, dataCallBack, newDataOrigin, nameAttribObj);
                             EditorGUI.indentLevel--;
                         }
                     }
@@ -283,7 +384,7 @@ namespace MyTools
                         for (int i = 0; i < childData.Count; i++)
                         {
                             EditorGUI.indentLevel++;
-                            ExportDeepList(childData[i], childData, newDataOriginArray[i], i);
+                            ExportDeepList(childData[i], childData, newDataOriginArray[i], dataName, i);
                             EditorGUI.indentLevel--;
                         }
                         EditorGUILayout.EndVertical();
@@ -306,18 +407,38 @@ namespace MyTools
             }
             else
             {
-                EditorGUI.BeginChangeCheck();
-                EditorGUI.indentLevel++;
-                nameAttribObj = EditorGUILayout.TextField($"{dataName}" + CheckValueChange(dataOrigin[dataName].ToString() == parentDict[dataName].ToString()), dataObject.Type.ToString() == "Float" ? ((float)dataObject).ToString("0.0##") : dataObject.ToString());
-                if (EditorGUI.EndChangeCheck())
+                if (valueSearch == "" && searchKey == "")
                 {
-                    ValidateData(parentDict[dataName].Type.ToString(), nameAttribObj, null, parentDict, 0, dataName);
+                    EditorGUI.BeginChangeCheck();
+                    EditorGUI.indentLevel++;
+                    nameAttribObj = EditorGUILayout.TextField($"{dataName}" + CheckValueChange(dataOrigin[dataName].ToString() == parentDict[dataName].ToString()), dataObject.Type.ToString() == "Float" ? ((float)dataObject).ToString("0.0##") : dataObject.ToString());
+                    if (EditorGUI.EndChangeCheck())
+                    {
+                        ValidateData(parentDict[dataName].Type.ToString(), nameAttribObj, null, parentDict, 0, dataName);
+                    }
+                    EditorGUI.indentLevel--;
                 }
-                EditorGUI.indentLevel--;
+                else if (valueSearch.ToLower() == dataObject.ToString().ToLower() || searchKey.ToLower() == dataName.ToLower())
+                {
+                    
+                    if (parentArray == null)
+                    {
+                        DataSearched.Add(parentKey, dataOrigin);
+                    }
+                    else
+                    {
+                        if (!DataSearched.ContainsKey(parentKey))
+                        {
+                            DataSearched.Add(parentKey, parentArray);
+                        }
+                    }
+                    
+                    showData = false;
+                }
             }
         }
 
-        public void ExportDeepList(JToken data, JArray parentData, JToken dataOrigin ,int index)
+        public void ExportDeepList(JToken data, JArray parentData, JToken dataOrigin, string parentName, int index)
         {
             if (data.Type.ToString() == "Object")
             {
@@ -327,7 +448,7 @@ namespace MyTools
                 foreach (JProperty child in dataCallBack.Properties())
                 {
                     EditorGUI.indentLevel++;
-                    ExportDeepDict(child.Name, child.Value, dataCallBack, newDataOrigin, index);
+                    ExportDeepDict(child.Name, child.Value, dataCallBack, newDataOrigin, parentName, parentData, index);
                     EditorGUI.indentLevel--;
                 }
                 EditorGUILayout.EndVertical();
@@ -344,14 +465,23 @@ namespace MyTools
 
             else
             {
-                EditorGUI.BeginChangeCheck();
-                EditorGUI.indentLevel++;
-                nameAttribArr = EditorGUILayout.TextField(CheckValueChange(dataOrigin.ToString() == parentData[index].ToString()), data.Type.ToString() == "Float" ? ((float)data).ToString("0.0##") : data.ToString());
-                if (EditorGUI.EndChangeCheck())
+                if (valueSearch == "" && searchKey == "")
                 {
-                    ValidateData(parentData[index].Type.ToString(), nameAttribArr, parentData, null, index, "");
+                    EditorGUI.BeginChangeCheck();
+                    EditorGUI.indentLevel++;
+                    nameAttribArr = EditorGUILayout.TextField(CheckValueChange(dataOrigin.ToString() == parentData[index].ToString()), data.Type.ToString() == "Float" ? ((float)data).ToString("0.0##") : data.ToString());
+                    if (EditorGUI.EndChangeCheck())
+                    {
+                        ValidateData(parentData[index].Type.ToString(), nameAttribArr, parentData, null, index, "");
+                    }
+                    EditorGUI.indentLevel--;
                 }
-                EditorGUI.indentLevel--;
+
+                else if (valueSearch.ToLower() == data.ToString().ToLower() || searchKey.ToLower() == parentName.ToString().ToLower())
+                {
+                    DataSearched.Add(parentName, parentData);
+                    showData = false;
+                }
             }
         }
 
@@ -360,7 +490,8 @@ namespace MyTools
             if (!change)
             {
                 return "*";
-            } else
+            }
+            else
             {
                 return " ";
             }
