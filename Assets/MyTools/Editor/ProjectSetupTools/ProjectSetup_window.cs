@@ -20,6 +20,8 @@ using System.Linq;
 using System.Linq.Expressions;
 using static PlasticPipe.PlasticProtocol.Messages.Serialization.ItemHandlerMessagesSerialization;
 using System.Globalization;
+using UnityEditor.AnimatedValues;
+using System.Security.Cryptography;
 
 namespace MyTools
 {
@@ -34,6 +36,7 @@ namespace MyTools
         string nameAttribArr = "";
         string nameAttribObj = "";
         string nameAttrib = "";
+        bool nameAttribBool;
 
         bool showAttribArr = true;
         bool writeData = false;
@@ -51,9 +54,6 @@ namespace MyTools
 
         #region Main Methods
 
-        
-        Dictionary<string, string> listDataOriginal = new Dictionary<string, string>();
-
         public static void InitWindow()
         {
             win = EditorWindow.GetWindow<ProjectSetup_window>("Project Setup");
@@ -62,8 +62,6 @@ namespace MyTools
 
         void OnGUI()
         {
-
-            GUILayout.Label("This is a label.", EditorStyles.boldLabel);
 
             dir = EditorGUILayout.TextField("Diretion: ", dir);
 
@@ -147,35 +145,28 @@ namespace MyTools
                                 showAttribArr = false;
                             }
                         }
+                    } 
+
+                    else if (property.Value.Type.ToString() == "Boolean")
+                    {
+                        nameAttribBool = (bool)property.Value;
+                        nameAttrib = property.Name;
+                        nameAttribBool = EditorGUILayout.Toggle(nameAttrib + CheckValueChange(data[property.Name].ToString() == curData[property.Name].ToString()) + ":", nameAttribBool);
+                        curData[property.Name] = nameAttribBool;
                     }
+
                     else
                     {
                         EditorGUI.BeginChangeCheck();
                         GUILayout.BeginHorizontal();
                         nameAttrib = property.Name;
-                        nameAttrib = EditorGUILayout.TextField(nameAttrib + CheckValueChange(data[property.Name].ToString() == curData[property.Name].ToString()) + ":", property.Value.ToString(), GUILayout.Width(200));
+                        nameAttrib = EditorGUILayout.TextField(nameAttrib + CheckValueChange(data[property.Name].ToString() == curData[property.Name].ToString()) + ":", property.Value.Type.ToString() == "Float" ? ((float)property.Value).ToString("0.0##") : property.Value.ToString(), GUILayout.Width(200));
 
                         GUILayout.EndHorizontal();
 
                         if (EditorGUI.EndChangeCheck())
                         {
-                            if (curData[property.Name].Type.ToString() == "Integer")
-                            {
-                                try
-                                {
-                                    curData[property.Name] = Int32.Parse(nameAttrib);
-                                    checkLoad = true;
-                                }
-                                catch (FormatException e)
-                                {
-                                    this.LogError(e);
-                                    checkLoad = false;
-                                }
-                            }
-                            else
-                            {
-                                curData[property.Name] = nameAttrib;
-                            }
+                            ValidateData(curData[property.Name].Type.ToString(), nameAttrib, null, curData, 0, property.Name);
                         }
                     }
                 }
@@ -304,31 +295,22 @@ namespace MyTools
                     }
                 }
             }
+
+            else if (dataObject.Type.ToString() == "Boolean")
+            {
+                nameAttribBool = (bool)dataObject;
+                EditorGUI.indentLevel++;
+                nameAttribBool = EditorGUILayout.Toggle($"{dataName}" + CheckValueChange(dataOrigin[dataName].ToString() == parentDict[dataName].ToString()), nameAttribBool);
+                EditorGUI.indentLevel--;
+                parentDict[dataName] = nameAttribBool;
+            }
             else
             {
                 EditorGUI.BeginChangeCheck();
                 EditorGUI.indentLevel++;
-                nameAttribObj = EditorGUILayout.TextField($"{dataName}" + CheckValueChange(dataOrigin[dataName].ToString() == parentDict[dataName].ToString()), dataObject.ToString());
+                nameAttribObj = EditorGUILayout.TextField($"{dataName}" + CheckValueChange(dataOrigin[dataName].ToString() == parentDict[dataName].ToString()), dataObject.Type.ToString() == "Float" ? ((float)dataObject).ToString("0.0##") : dataObject.ToString());
                 if (EditorGUI.EndChangeCheck())
                 {
-                    /*if (parentDict[dataName].Type.ToString() == "Integer")
-                    {
-                        try
-                        {
-                            parentDict[dataName] = Int32.Parse(nameAttribObj);
-                            checkLoad = true;
-                        }
-                        catch (FormatException e)
-                        {
-                            checkLoad = false;
-                            this.LogError(e);
-                        }
-                    }
-                    else
-                    {
-                        parentDict[dataName] = nameAttribObj; 
-                    }*/
-
                     ValidateData(parentDict[dataName].Type.ToString(), nameAttribObj, null, parentDict, 0, dataName);
                 }
                 EditorGUI.indentLevel--;
@@ -350,31 +332,23 @@ namespace MyTools
                 }
                 EditorGUILayout.EndVertical();
             }
+
+            else if (data.Type.ToString() == "Boolean")
+            {
+                nameAttribBool = (bool)data;
+                EditorGUI.indentLevel++;
+                nameAttribBool = EditorGUILayout.Toggle(CheckValueChange(dataOrigin.ToString() == parentData[index].ToString()), nameAttribBool);
+                EditorGUI.indentLevel--;
+                parentData[index] = nameAttribBool;
+            }
+
             else
             {
                 EditorGUI.BeginChangeCheck();
                 EditorGUI.indentLevel++;
-                nameAttribArr = EditorGUILayout.TextField(CheckValueChange(dataOrigin.ToString() == parentData[index].ToString()), data.ToString());
+                nameAttribArr = EditorGUILayout.TextField(CheckValueChange(dataOrigin.ToString() == parentData[index].ToString()), data.Type.ToString() == "Float" ? ((float)data).ToString("0.0##") : data.ToString());
                 if (EditorGUI.EndChangeCheck())
                 {
-                    /* if (parentData[index].Type.ToString() == "Integer")
-                     {
-                         try
-                         {
-                             parentData[index] = Int32.Parse(nameAttribArr);
-                             checkLoad = true;
-                         }
-                         catch (FormatException e)
-                         {
-                             checkLoad = false;
-                             this.LogError(e);
-                         }
-                     }
-                     else
-                     {
-                         parentData[index] = nameAttribArr;
-                     }*/
-
                     ValidateData(parentData[index].Type.ToString(), nameAttribArr, parentData, null, index, "");
                 }
                 EditorGUI.indentLevel--;
@@ -401,7 +375,7 @@ namespace MyTools
                     try
                     {
                         checkLoad = true;
-                        parentDict[dataName] = Int32.Parse(inputData);
+                        parentDict[dataName] = inputData.Contains(".") ? (int)float.Parse(inputData, CultureInfo.InvariantCulture.NumberFormat) : Int32.Parse(inputData);
                     }
                     catch (FormatException e)
                     {
@@ -414,7 +388,7 @@ namespace MyTools
                     try
                     {
                         checkLoad = true;
-                        parentDict[dataName] = float.Parse(inputData, CultureInfo.InvariantCulture.NumberFormat);
+                        parentDict[dataName] = Math.Round(float.Parse(inputData, CultureInfo.InvariantCulture.NumberFormat), 3);
                     }
                     catch (FormatException e)
                     {
@@ -434,7 +408,7 @@ namespace MyTools
                     try
                     {
                         checkLoad = true;
-                        parentList[index] = Int32.Parse(inputData);
+                        parentList[index] = inputData.Contains(".") ? (int)float.Parse(inputData, CultureInfo.InvariantCulture.NumberFormat) : Int32.Parse(inputData);
                     }
                     catch (FormatException e)
                     {
@@ -447,7 +421,8 @@ namespace MyTools
                     try
                     {
                         checkLoad = true;
-                        parentList[index] = float.Parse(inputData, CultureInfo.InvariantCulture.NumberFormat);
+                        parentList[index] = Math.Round(float.Parse(inputData, CultureInfo.InvariantCulture.NumberFormat), 3);
+
                     }
                     catch (FormatException e)
                     {
