@@ -12,7 +12,7 @@ public static class Logger
     private static void DoLog(Action<string, Object> LogFunction, string prefix, Object myObj, params object[] msg)
     {
 #if UNITY_EDITOR
-        var name = (myObj ? myObj.name : "NullObject").Color("lightblue");
+        var name = (myObj ? myObj.name : "NullObject");
         LogFunction($"{prefix}[{name}]: {String.Join("; ", msg)}\n ", myObj);
 #endif
     }
@@ -24,21 +24,21 @@ public static class Logger
 
     public static void LogDetail(this Object myObj, params object[] msg)
     {
-        DoLog(Debug.Log, "➤".Color("green"), myObj, msg);
+        DoLog(Debug.Log, "", myObj, msg);
     }
 
     public static void LogError(this Object myObj, params object[] msg)
     {
-        DoLog(Debug.LogError, "<!>".Color("red"), myObj, msg);
+        DoLog(Debug.LogError, "", myObj, msg);
     }
 
     public static void LogWarning(this Object myObj, params object[] msg)
     {
-        DoLog(Debug.LogWarning, "⚠️".Color("yellow"), myObj, msg);
+        DoLog(Debug.LogWarning,"", myObj, msg);
     }
 
     public static void LogSuccess(this Object myObj, params object[] msg)
     {
-        DoLog(Debug.Log, "☻".Color("green"), myObj, msg);
+        DoLog(Debug.Log, "", myObj, msg);
     }
 }

@@ -24,6 +24,7 @@ using UnityEditor.AnimatedValues;
 using System.Security.Cryptography;
 using UnityEngine.UIElements;
 using Unity.VisualScripting;
+using System.Buffers.Text;
 
 namespace MyTools
 {
@@ -42,7 +43,8 @@ namespace MyTools
         string searchKey = "";
         string searchValueField = "";
         string searchKeyField = "";
-
+        string KEY = "";
+        string IV = "";
 
         bool nameAttribBool;
         bool showAttribArr = true;
@@ -51,6 +53,7 @@ namespace MyTools
         bool checkLoad = true;
         bool showData = false;
         bool foldout = true;
+        bool Encrypted = false;
 
         Vector2 paletteScrollPos = new Vector2(0, 0);
 
@@ -60,6 +63,8 @@ namespace MyTools
         JObject data = null;
         JObject curData = new();
         JObject DataSearched = new();
+        private IDataService DataService = new JsonDataService();
+
         #endregion
 
         #region Main Methods
@@ -72,8 +77,15 @@ namespace MyTools
 
         void OnGUI()
         {
-
             dir = EditorGUILayout.TextField("Diretion: ", dir);
+
+            Encrypted = EditorGUILayout.Toggle("Encrypted:", Encrypted);
+
+            if (Encrypted)
+            {
+                KEY = EditorGUILayout.TextField("Enter Key: ", KEY);
+                IV = EditorGUILayout.TextField("Enter IV: ", IV);
+            }
 
             EditorGUILayout.Space();
 
@@ -81,21 +93,54 @@ namespace MyTools
             {
                 checkBtn = true;
 
+                /*if (KEY == "" && IV == "")
+                {
+                    // Generate a random key
+                    byte[] keyBytes = new byte[32]; // 256 bits
+                    using (var rng = new RNGCryptoServiceProvider())
+                    {
+                        rng.GetBytes(keyBytes);
+                    }
+                    KEY = System.Convert.ToBase64String(keyBytes);
+
+                    // Generate a random IV
+                    byte[] ivBytes = new byte[16]; // 128 bits
+                    using (var rng = new RNGCryptoServiceProvider())
+                    {
+                        rng.GetBytes(ivBytes);
+                    }
+                    IV = System.Convert.ToBase64String(ivBytes);
+                }*/
+
                 try
                 {
-                    data = LoadJson(dir);
-                    curData = new();
-                    searchKeyField = "";
-                    searchValueField = "";
-
-                    foreach (JProperty property in data.Properties())
+                    if (!Encrypted)
                     {
-                        curData.Add(property.Name, property.Value);
+                        data = LoadJson(dir);
+                        curData = new();
+                        searchKeyField = "";
+                        searchValueField = "";
+
+                        foreach (JProperty property in data.Properties())
+                        {
+                            curData.Add(property.Name, property.Value);
+                        }
+                    } else
+                    {
+                        data = LoadJson(dir);
+                        curData = new();
+                        searchKeyField = "";
+                        searchValueField = "";
+
+                        foreach (JProperty property in data.Properties())
+                        {
+                            curData.Add(property.Name, property.Value);
+                        }
                     }
                 }
-                catch (Exception e)
+                catch
                 {
-                    this.LogError(e);
+                    Debug.LogError("Failed to load data from file!!!");
                 }
             }
 
@@ -258,7 +303,8 @@ namespace MyTools
                                             nameAttrib = EditorGUILayout.TextField(nameAttrib, child.Value.Type.ToString() == "Float" ? ((float)child.Value).ToString("0.0##") : child.Value.ToString());
                                             EditorGUI.indentLevel--;
                                         }
-                                    } else
+                                    }
+                                    else
                                     {
                                         EditorGUI.indentLevel++;
                                         nameAttrib = EditorGUILayout.TextField(newArrayValue[i].Type.ToString() == "Float" ? ((float)newArrayValue[i]).ToString("0.0##") : newArrayValue[i].ToString());
@@ -299,7 +345,7 @@ namespace MyTools
                 }
                 else
                 {
-                    this.LogError("Write Data Failed");
+                    Debug.LogError("Failed to writing data!!!");
                     writeData = false;
                 }
 
@@ -319,18 +365,13 @@ namespace MyTools
 
         public JObject LoadJson(string filePath)
         {
-            //JsonDictionaryAttribute jsonDictionaryAttribute = new JsonDictionaryAttribute();
-            JObject data = JObject.Parse(File.ReadAllText(filePath));
+            JObject data = DataService.LoadData<JObject>(filePath, Encrypted, KEY, IV);
             return data;
         }
+
         public void WriteToJson(JObject data, string pathFile)
         {
-            using (StreamWriter file = File.CreateText(@pathFile))
-            {
-                JsonSerializer serializer = new JsonSerializer();
-                //serialize object directly into file stream
-                serializer.Serialize(file, data);
-            }
+            DataService.SaveData(pathFile, data, Encrypted, KEY, IV);
         }
 
         public void ExportDeepDict(string dataName, JToken dataObject, JObject parentDict, JObject dataOrigin, string parentKey = "", JArray parentArray = null, int index = 0)
@@ -420,7 +461,7 @@ namespace MyTools
                 }
                 else if (valueSearch.ToLower() == dataObject.ToString().ToLower() || searchKey.ToLower() == dataName.ToLower())
                 {
-                    
+
                     if (parentArray == null)
                     {
                         DataSearched.Add(parentKey, dataOrigin);
@@ -432,7 +473,7 @@ namespace MyTools
                             DataSearched.Add(parentKey, parentArray);
                         }
                     }
-                    
+
                     showData = false;
                 }
             }
@@ -511,7 +552,7 @@ namespace MyTools
                     catch (FormatException e)
                     {
                         checkLoad = false;
-                        this.LogError(e);
+                        Debug.LogError(e);
                     }
                 }
                 else if (dataType == "Float")
@@ -524,7 +565,7 @@ namespace MyTools
                     catch (FormatException e)
                     {
                         checkLoad = false;
-                        this.LogError(e);
+                        Debug.LogError(e);
                     }
                 }
                 else
@@ -544,7 +585,7 @@ namespace MyTools
                     catch (FormatException e)
                     {
                         checkLoad = false;
-                        this.LogError(e);
+                        Debug.LogError(e);
                     }
                 }
                 else if (dataType == "Float")
@@ -558,7 +599,8 @@ namespace MyTools
                     catch (FormatException e)
                     {
                         checkLoad = false;
-                        this.LogError(e);
+                        Debug.LogError(e);
+
                     }
                 }
                 else
